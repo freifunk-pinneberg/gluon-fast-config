@@ -1,0 +1,219 @@
+#!/usr/bin/lua
+
+-- (C) Sunrabbit 2015
+
+-- Konstanten
+
+local timeout = 600 		-- 10 Minuten 
+
+-- /Konstanten
+
+local util = require("luci.util")
+local fs = require("luci.fs")
+local ltn12 = require 'luci.ltn12'
+local sys = require("luci.sys")
+local json = require("luci.json")
+local nixio = require 'nixio'
+local platform_info = require("platform_info")
+local uci = luci.model.uci.cursor()
+
+local hostname = sys.hostname()
+
+-- Funktion um Sonderzeichen für HTML aufzubereiten
+
+function escape_html(s)
+  return (s:gsub('&', '&amp;'):gsub('<', '&lt;'):gsub('>', '&gt;'):gsub('"', '&quot;'))
+end
+
+-- Funktion um ein Datum in einen Timestamp zu verwandeln (für Berechnungen)
+function get_timestamp(timeToConvert)
+
+  pattern = "(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)"
+  year,month,day,hour,min,sec = timeToConvert:match(pattern)
+  
+  return(os.time({day=day,month=month,year=year,hour=hour,min=min,sec=sec}))
+  
+end
+
+-- PAGE Header
+io.write("Content-type: text/html\n\n")
+io.write("<!DOCTYPE html>\n")
+io.write("<html>")
+io.write("<head>")
+io.write("<title>Fast Config Mode on " .. escape_html(hostname) .. "</title>")
+io.write("<style>")
+io.write("table, th, td {")
+io.write("    border: 1px solid black;")
+io.write("    border-collapse: collapse;")
+io.write("}")
+io.write("th, td {")
+io.write("    padding: 5px;")
+io.write("    text-align: left;")
+io.write("}")
+io.write("th {")
+io.write("    background-color: black;")
+io.write("    color: white;")
+io.write("}")
+io.write("</style>")
+io.write("</head>\n")
+io.write("<body>\n")
+
+-- GET-Parameter lesen
+
+local info = os.getenv("QUERY_STRING")
+local params = {}
+local echo = {}
+
+for name, value in string.gmatch(info .. '&', '(.-)%=(.-)%&') do
+        value = string.gsub(value , '%+', ' ')
+        value = string.gsub(value , '%%(%x%x)', function(dpc)
+                return string.char(tonumber(dpc,16))
+                end )
+        params[name] = value
+
+        value = string.gsub(value, "%&", "&amp;")
+        value = string.gsub(value, "%<", "&lt;")
+        value = string.gsub(value, '%"', "&quot;")
+        echo[name] = value
+
+end
+
+-- Prüfen ob der Fast Config Mode (FCM) aktiviert ist
+
+local fcm_activ = false
+local file_wps_pressed = io.open("/tmp/.wps_pressed", "r")
+local last_time_wps_pressed = ""
+
+if file_wps_pressed then
+
+  for line in file_wps_pressed:lines() do 
+    last_time_wps_pressed = line     
+  end
+  file_wps_pressed:close()
+  
+  local diff = get_timestamp( os.date("%Y-%m-%d %T") ) - get_timestamp( last_time_wps_pressed )
+
+  if diff > timeout then
+
+    -- FCM abgelaufen  
+  
+  else
+  
+    fcm_activ = true
+  
+  end
+  
+end
+
+-- Abmelden prüfen
+
+if ( params["cmd"] == "Abmelden" ) then
+
+  util.exec("rm /tmp/.wps_pressed")
+
+  io.write("<table width=\"100%\">")
+  io.write("  <tr>")
+  io.write("    <th>Fast Config Mode</th>")
+  io.write("  </tr>")
+  io.write("  <tr>")
+  io.write("    <td>Fast Config Mode deaktiviert</td> ")
+  io.write("  </tr>   ")
+  io.write("</table>  ")
+  
+else  
+
+if fcm_activ == false then
+
+  -- Sitzung abgelaufen
+
+  io.write("<table width=\"100%\">")
+  io.write("  <tr>")
+  io.write("    <th>Fast Config Mode</th>")
+  io.write("  </tr>")
+  io.write("  <tr>")
+  io.write("    <td>Um den Fast Config Mode zu aktivieren, bitte die Taste WPS/RESET am Router einmal kurz druecken</td> ")
+  io.write("  </tr>   ")
+  io.write("</table>  ")
+  
+else
+
+  -- Sitzung aktiv
+
+  io.write("<form action=\"config\" method=\"get\">")
+  io.write("<table>")
+  io.write("<table width=\"100%\">")
+  io.write("  <tr>")
+  io.write("    <th>Fast Config Mode</th>")
+  io.write("  </tr>")
+  io.write("  <tr>")
+  io.write("    <td>Fast Config Mode aktiv<br><input type=\"submit\" name=\"cmd\" value=\"Abmelden\"></td>")
+  io.write("  </tr>   ")
+  io.write("</table>  ")
+  io.write("</form>   ")
+  io.write("<p>   ")
+
+if params["cmd"] ~= nil then
+ 
+  if params["cmd"] == "Setzen" then
+
+    io.write("<p>Standort gesetzt</p>")
+
+    local sname = uci:get_first("gluon-node-info", "location")
+    uci:set("gluon-node-info", sname, "share_location", 1)
+    uci:set("gluon-node-info", sname, "latitude", params["latitude"])
+    uci:set("gluon-node-info", sname, "longitude", params["longitude"])
+    uci:save("gluon-node-info")
+    uci:commit("gluon-node-info")
+
+  end
+
+  if params["cmd"] == "Loeschen" then
+
+    io.write("<p>Standort geloescht</p>")
+
+    local sname = uci:get_first("gluon-node-info", "location")
+    uci:set("gluon-node-info", sname, "share_location", 0)
+    uci:set("gluon-node-info", sname, "latitude", "")
+    uci:set("gluon-node-info", sname, "longitude", "")
+    uci:save("gluon-node-info")
+    uci:commit("gluon-node-info")
+
+  end
+
+end
+
+  local latitude = util.trim(uci:get_first("gluon-node-info", "location", "latitude") or "")
+  local longitude = util.trim(uci:get_first("gluon-node-info", "location", "longitude") or "")
+  
+  io.write("<script>")
+  io.write("navigator.geolocation.getCurrentPosition(function(position){ document.getElementById('latitude').value = position.coords.latitude; document.getElementById('longitude').value = position.coords.longitude;  }, function(){ }); ")
+  io.write("</script>")
+
+  io.write("<form action=\"config\" method=\"get\">")
+  io.write("<table>")
+  io.write("  <caption>Standort</caption>")
+  io.write("  <tr>")
+  io.write("    <th>Parameter</th>")
+  io.write("    <th>Eigenschaft</th>")
+  io.write("  </tr>")
+  io.write("  <tr>")
+  io.write("    <td>Latitude (Breite):</td>")
+  io.write("    <td><input type=\"text\" id=\"latitude\" name=\"latitude\" value=\"\"> Aktuell: " .. latitude .. "</td>")
+  io.write("  </tr>")
+  io.write("  <tr>")
+  io.write("    <td>Longitude (Laenge):</td>")
+  io.write("    <td><input type=\"text\" id=\"longitude\" name=\"longitude\" value=\"\"> Aktuell: " .. longitude .. "</td>")
+  io.write("  </tr>")
+  io.write("  <tr>")
+  io.write("    <td><input type=\"submit\" name=\"cmd\" value=\"Loeschen\"></td>")
+  io.write("    <td><input type=\"submit\" name=\"cmd\" value=\"Setzen\"></input></td>")
+  io.write("  </tr>")
+  io.write("</table>")
+  io.write("</form>   ")
+ 
+end -- Aktiv oder nicht
+
+end -- Abmelden
+
+io.write("</body>")
+io.write("</html>")
