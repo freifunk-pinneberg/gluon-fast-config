@@ -1,0 +1,12 @@
+#!/bin/sh
+
+if [ "$BUTTON" = wps -o "$BUTTON" = reset ]; then
+	case "$ACTION" in
+		pressed)
+			echo `date +"%Y-%m-%d %T"` > /tmp/.wps_pressed 
+			;;
+		released)
+			;;
+	esac
+fi
+
