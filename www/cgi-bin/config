@@ -1,219 +1,181 @@
 #!/usr/bin/lua
 
--- (C) Sunrabbit 2015
-
 -- Konstanten
 
-local timeout = 600 		-- 10 Minuten 
+local timeout = 600 		-- FCM-Timeout 10 Minuten 
 
--- /Konstanten
-
+-- Ein paar Bibliotheken
 local util = require("luci.util")
 local fs = require("luci.fs")
-local ltn12 = require 'luci.ltn12'
 local sys = require("luci.sys")
-local json = require("luci.json")
-local nixio = require 'nixio'
 local platform_info = require("platform_info")
 local uci = luci.model.uci.cursor()
+local fcm_web = require("fcm.web")
+local fcm_functions = require("fcm.functions")
 
+-- Grundlegen Informationen sammeln
 local hostname = sys.hostname()
+local model = platform_info.get_model()
+local release = util.trim(fs.readfile("/lib/gluon/release") or "")
 
--- Funktion um Sonderzeichen für HTML aufzubereiten
+local latitude = fcm_functions:fixhtml(util.trim(uci:get_first("gluon-node-info", "location", "latitude") or ""))
+local longitude = fcm_functions:fixhtml(util.trim(uci:get_first("gluon-node-info", "location", "longitude") or ""))
+local share_location = util.trim(uci:get_first("gluon-node-info", "location", "share_location") or "0")
+local contact = util.trim(uci:get_first("gluon-node-info", "owner", "contact") or "")
+local uptime_load = util.trim(sys.exec("uptime | sed 's/^ \+//'"))
+local uptime = uptime_load:sub(uptime_load:find("up")+3,uptime_load:find(",")-1)
+local node_load = uptime_load:sub(uptime_load:find("load average")+14)
+local subpage = os.getenv ("PATH_INFO") or ""
 
-function escape_html(s)
-  return (s:gsub('&', '&amp;'):gsub('<', '&lt;'):gsub('>', '&gt;'):gsub('"', '&quot;'))
-end
-
--- Funktion um ein Datum in einen Timestamp zu verwandeln (für Berechnungen)
-function get_timestamp(timeToConvert)
-
-  pattern = "(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)"
-  year,month,day,hour,min,sec = timeToConvert:match(pattern)
-  
-  return(os.time({day=day,month=month,year=year,hour=hour,min=min,sec=sec}))
-  
-end
-
--- PAGE Header
-io.write("Content-type: text/html\n\n")
-io.write("<!DOCTYPE html>\n")
-io.write("<html>")
-io.write("<head>")
-io.write("<title>Fast Config Mode on " .. escape_html(hostname) .. "</title>")
-io.write("<style>")
-io.write("table, th, td {")
-io.write("    border: 1px solid black;")
-io.write("    border-collapse: collapse;")
-io.write("}")
-io.write("th, td {")
-io.write("    padding: 5px;")
-io.write("    text-align: left;")
-io.write("}")
-io.write("th {")
-io.write("    background-color: black;")
-io.write("    color: white;")
-io.write("}")
-io.write("</style>")
-io.write("</head>\n")
-io.write("<body>\n")
-
--- GET-Parameter lesen
-
-local info = os.getenv("QUERY_STRING")
-local params = {}
-local echo = {}
-
-for name, value in string.gmatch(info .. '&', '(.-)%=(.-)%&') do
-        value = string.gsub(value , '%+', ' ')
-        value = string.gsub(value , '%%(%x%x)', function(dpc)
-                return string.char(tonumber(dpc,16))
-                end )
-        params[name] = value
-
-        value = string.gsub(value, "%&", "&amp;")
-        value = string.gsub(value, "%<", "&lt;")
-        value = string.gsub(value, '%"', "&quot;")
-        echo[name] = value
-
-end
-
--- Prüfen ob der Fast Config Mode (FCM) aktiviert ist
-
-local fcm_activ = false
-local file_wps_pressed = io.open("/tmp/.wps_pressed", "r")
-local last_time_wps_pressed = ""
-
-if file_wps_pressed then
-
-  for line in file_wps_pressed:lines() do 
-    last_time_wps_pressed = line     
-  end
-  file_wps_pressed:close()
-  
-  local diff = get_timestamp( os.date("%Y-%m-%d %T") ) - get_timestamp( last_time_wps_pressed )
-
-  if diff > timeout then
-
-    -- FCM abgelaufen  
-  
-  else
-  
-    fcm_activ = true
-  
-  end
-  
-end
+-- HTTP POST Daten lesen
+local post_data = fcm_functions:get_post_data()
+local fcm_activ = fcm_functions:check_fcm_enabled(timeout)
+local command = post_data["cmd"] or ""
 
 -- Abmelden prüfen
-
-if ( params["cmd"] == "Abmelden" ) then
+if subpage == "/logout" then
 
   util.exec("rm /tmp/.wps_pressed")
-
-  io.write("<table width=\"100%\">")
-  io.write("  <tr>")
-  io.write("    <th>Fast Config Mode</th>")
-  io.write("  </tr>")
-  io.write("  <tr>")
-  io.write("    <td>Fast Config Mode deaktiviert</td> ")
-  io.write("  </tr>   ")
-  io.write("</table>  ")
-  
-else  
-
-if fcm_activ == false then
-
-  -- Sitzung abgelaufen
-
-  io.write("<table width=\"100%\">")
-  io.write("  <tr>")
-  io.write("    <th>Fast Config Mode</th>")
-  io.write("  </tr>")
-  io.write("  <tr>")
-  io.write("    <td>Um den Fast Config Mode zu aktivieren, bitte die Taste WPS/RESET am Router einmal kurz druecken</td> ")
-  io.write("  </tr>   ")
-  io.write("</table>  ")
+  fcm_activ = false
+  fcm_web:redirect("/cgi-bin/config")
   
 else
 
-  -- Sitzung aktiv
+-- Kopf der HTML-Datei
+fcm_web:head( "Fast-Config-Mode von " .. fcm_functions:fixhtml(hostname) )
 
-  io.write("<form action=\"config\" method=\"get\">")
-  io.write("<table>")
+-- Body
+fcm_web:start_of_body(subpage, fcm_activ)
+
+io.write("<article class=\"content\" role=\"article\">")
+io.write("")
+io.write("	<div id=\"c1\" class=\"csc-default\">")
+io.write("")
+io.write("		<h1>Fast-Config-Mode von " .. fcm_functions:fixhtml(hostname) .. "</h1>")
+io.write("")
+
+-- Prüfen ob der FCM aktiv ist, sonst Warnung ausgeben
+  
+if fcm_activ == false then
+
   io.write("<table width=\"100%\">")
   io.write("  <tr>")
-  io.write("    <th>Fast Config Mode</th>")
+  io.write("    <th>Hinweis</th>")
   io.write("  </tr>")
   io.write("  <tr>")
-  io.write("    <td>Fast Config Mode aktiv<br><input type=\"submit\" name=\"cmd\" value=\"Abmelden\"></td>")
+  io.write("    <td color=\"red\">Um den Fast Config Mode zu aktivieren, bitte die Taste WPS/RESET am Router einmal kurz druecken</td> ")
   io.write("  </tr>   ")
   io.write("</table>  ")
-  io.write("</form>   ")
-  io.write("<p>   ")
 
-if params["cmd"] ~= nil then
- 
-  if params["cmd"] == "Setzen" then
-
-    io.write("<p>Standort gesetzt</p>")
-
-    local sname = uci:get_first("gluon-node-info", "location")
-    uci:set("gluon-node-info", sname, "share_location", 1)
-    uci:set("gluon-node-info", sname, "latitude", params["latitude"])
-    uci:set("gluon-node-info", sname, "longitude", params["longitude"])
-    uci:save("gluon-node-info")
-    uci:commit("gluon-node-info")
-
-  end
-
-  if params["cmd"] == "Loeschen" then
-
-    io.write("<p>Standort geloescht</p>")
-
-    local sname = uci:get_first("gluon-node-info", "location")
-    uci:set("gluon-node-info", sname, "share_location", 0)
-    uci:set("gluon-node-info", sname, "latitude", "")
-    uci:set("gluon-node-info", sname, "longitude", "")
-    uci:save("gluon-node-info")
-    uci:commit("gluon-node-info")
-
-  end
+  io.write("<P>&nbsp;</P>")
+  
+  subpage = "" -- Subpage löschen. Kein Zugriff auf die Config-Seiten
 
 end
 
-  local latitude = util.trim(uci:get_first("gluon-node-info", "location", "latitude") or "")
-  local longitude = util.trim(uci:get_first("gluon-node-info", "location", "longitude") or "")
-  
-  io.write("<script>")
-  io.write("navigator.geolocation.getCurrentPosition(function(position){ document.getElementById('latitude').value = position.coords.latitude; document.getElementById('longitude').value = position.coords.longitude;  }, function(){ }); ")
-  io.write("</script>")
+if subpage == "" then
 
-  io.write("<form action=\"config\" method=\"get\">")
-  io.write("<table>")
-  io.write("  <caption>Standort</caption>")
-  io.write("  <tr>")
-  io.write("    <th>Parameter</th>")
-  io.write("    <th>Eigenschaft</th>")
-  io.write("  </tr>")
-  io.write("  <tr>")
-  io.write("    <td>Latitude (Breite):</td>")
-  io.write("    <td><input type=\"text\" id=\"latitude\" name=\"latitude\" value=\"\"> Aktuell: " .. latitude .. "</td>")
-  io.write("  </tr>")
-  io.write("  <tr>")
-  io.write("    <td>Longitude (Laenge):</td>")
-  io.write("    <td><input type=\"text\" id=\"longitude\" name=\"longitude\" value=\"\"> Aktuell: " .. longitude .. "</td>")
-  io.write("  </tr>")
-  io.write("  <tr>")
-  io.write("    <td><input type=\"submit\" name=\"cmd\" value=\"Loeschen\"></td>")
-  io.write("    <td><input type=\"submit\" name=\"cmd\" value=\"Setzen\"></input></td>")
-  io.write("  </tr>")
-  io.write("</table>")
-  io.write("</form>   ")
- 
-end -- Aktiv oder nicht
+	-- Allgemeine Informationen
+
+	fcm_web:table_start("Allgemeine Informationen")
+
+	fcm_web:table_item("Model", fcm_functions:fixhtml(model))
+	fcm_web:table_item("Firmware Version", fcm_functions:fixhtml(release))
+	fcm_web:table_item("Betriebszeit", fcm_functions:fixhtml(uptime))
+	fcm_web:table_item("Auslastung", fcm_functions:fixhtml(node_load))
+
+	fcm_web:table_end()
+
+	io.write("<P>&nbsp;</P>")
+
+	-- Konfiguration
+
+	fcm_web:table_start("Konfiguration")
+
+	fcm_web:table_item("Kontaktdaten", fcm_functions:fixhtml(contact))
+	if share_location == "1" then
+		fcm_web:table_item("Standort", "Latitude " .. latitude .. " Longitude " .. longitude )
+	else
+		fcm_web:table_item("Standort", "Wird nicht übermittelt" )
+	end
+
+	fcm_web:table_end()
+
+	io.write("<P>&nbsp;</P>")
+
+end
+
+if subpage == "/location" then
+
+    if (command == "Setzen") then
+
+		local new_latitude = post_data["latitude"] or ""
+		local new_longitude = post_data["longitude"] or ""
+
+		if ( new_latitude == "" ) or ( new_longitude == "" ) then
+			-- Übermittlung abschalten
+			local sname = uci:get_first("gluon-node-info", "location")
+			uci:set("gluon-node-info", sname, "share_location", 0)
+			uci:set("gluon-node-info", sname, "latitude", new_latitude)
+			uci:set("gluon-node-info", sname, "longitude", new_longitude)
+			uci:save("gluon-node-info")
+			uci:commit("gluon-node-info")
+			share_location = "0"
+			else
+			-- Übermittlung einschalten 
+			local sname = uci:get_first("gluon-node-info", "location")
+			uci:set("gluon-node-info", sname, "share_location", 1)
+			uci:set("gluon-node-info", sname, "latitude", new_latitude)
+			uci:set("gluon-node-info", sname, "longitude", new_longitude)
+			uci:save("gluon-node-info")
+			uci:commit("gluon-node-info")
+			share_location = "1"
+		end
+		
+		latitude = new_latitude
+		longitude = new_longitude
+	
+	end
+
+	-- Aktuellen Standort ausgeben
+	fcm_web:table_start("Standort")
+
+	if share_location == "1" then
+		fcm_web:table_item("Status", "Aktiviert")
+		fcm_web:table_item("Latitude (Breite)", latitude )
+		fcm_web:table_item("Longitude (Laenge)", longitude )
+	else
+		fcm_web:table_item("Status", "Deaktivert" )
+	end
+	fcm_web:table_end()
+	
+	io.write("<P>&nbsp;</P>")
+
+	-- Location aus Browser abrufen (HTML5)
+	io.write("<script>")
+	io.write("navigator.geolocation.getCurrentPosition(function(position){ document.getElementById('latitude').value = position.coords.latitude; document.getElementById('longitude').value = position.coords.longitude;  }, function(){ }); ")
+	io.write("</script>")
+
+    -- Formular anzeigen	
+	io.write("<form action=\"/cgi-bin/config/location\" method=\"post\">")
+
+	fcm_web:table_start("Aendern")
+
+	fcm_web:table_item("Latitude (Breite)", "<input type=\"text\" id=\"latitude\" name=\"latitude\" value=\"\">")
+	fcm_web:table_item("Longitude (Laenge)", "<input type=\"text\" id=\"longitude\" name=\"longitude\" value=\"\">")
+  
+	fcm_web:table_item("<input type=\"submit\" name=\"cmd\" value=\"Setzen\"></input>", "Leere Werte um die Standortuebertragung abzuschalten")
+
+	fcm_web:table_end()
+
+	io.write("</form>   ")
+
+end
+
+io.write("	</div>")
+io.write("</article>")
+
+-- Ende :) 
+fcm_web:end_of_body()
 
 end -- Abmelden
-
-io.write("</body>")
-io.write("</html>")

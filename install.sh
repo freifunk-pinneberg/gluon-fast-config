@@ -14,6 +14,9 @@ echo "Fast-Config-Mode für GLUON"
 echo ""
 echo "Installation auf $1 läuft..."
 echo ""
+echo "Kopieren der Dateien (LUA)..."
+scp -r ./fcm/ root@$1:/usr/lib/lua/
+echo ""
 echo "Kopieren der Dateien (Webserver)..."
 scp -r ./www/ root@$1:/lib/gluon/status-page/
 echo ""
