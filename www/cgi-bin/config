@@ -63,7 +63,7 @@ if fcm_activ == false then
   io.write("    <th>Hinweis</th>")
   io.write("  </tr>")
   io.write("  <tr>")
-  io.write("    <td color=\"red\">Um den Fast Config Mode zu aktivieren, bitte die Taste WPS/RESET am Router einmal kurz druecken</td> ")
+  io.write("    <td color=\"red\">Um den Fast Config Mode zu aktivieren, bitte die Taste WPS/RESET am Router einmal kurz drücken</td> ")
   io.write("  </tr>   ")
   io.write("</table>  ")
 
@@ -159,12 +159,12 @@ if subpage == "/location" then
     -- Formular anzeigen	
 	io.write("<form action=\"/cgi-bin/config/location\" method=\"post\">")
 
-	fcm_web:table_start("Aendern")
+	fcm_web:table_start("Ändern")
 
 	fcm_web:table_item("Latitude (Breite)", "<input type=\"text\" id=\"latitude\" name=\"latitude\" value=\"\">")
 	fcm_web:table_item("Longitude (Laenge)", "<input type=\"text\" id=\"longitude\" name=\"longitude\" value=\"\">")
   
-	fcm_web:table_item("<input type=\"submit\" name=\"cmd\" value=\"Setzen\"></input>", "Leere Werte um die Standortuebertragung abzuschalten")
+	fcm_web:table_item("<input type=\"submit\" name=\"cmd\" value=\"Setzen\"></input>", "Leere Werte um die Standortübertragung abzuschalten")
 
 	fcm_web:table_end()
 
