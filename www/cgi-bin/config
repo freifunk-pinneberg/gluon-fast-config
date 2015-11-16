@@ -22,6 +22,7 @@ local latitude = fcm_functions:fixhtml(util.trim(uci:get_first("gluon-node-info"
 local longitude = fcm_functions:fixhtml(util.trim(uci:get_first("gluon-node-info", "location", "longitude") or ""))
 local share_location = util.trim(uci:get_first("gluon-node-info", "location", "share_location") or "0")
 local contact = util.trim(uci:get_first("gluon-node-info", "owner", "contact") or "")
+local role = util.trim(uci:get_first("gluon-node-info", "system", "role") or "node")
 local uptime_load = util.trim(sys.exec("uptime | sed 's/^ \+//'"))
 local uptime = uptime_load:sub(uptime_load:find("up")+3,uptime_load:find(",")-1)
 local node_load = uptime_load:sub(uptime_load:find("load average")+14)
@@ -93,6 +94,7 @@ if subpage == "" then
 	fcm_web:table_start("Konfiguration")
 
 	fcm_web:table_item("Kontaktdaten", fcm_functions:fixhtml(contact))
+	fcm_web:table_item("Rolle", fcm_functions:fixhtml(role))
 	if share_location == "1" then
 		fcm_web:table_item("Standort", "Latitude " .. latitude .. " Longitude " .. longitude )
 	else
