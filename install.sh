@@ -29,5 +29,9 @@ echo ""
 echo "Kopieren der Dateien (bins)..."
 scp -r ./bin/ root@$1:/usr/bin/
 echo ""
+echo "Kopieren der Dateien (config)..."
+scp -r ./config/ root@$1:/etc/config/
+echo ""
+echo ""
 echo "Fertig."
 echo ""

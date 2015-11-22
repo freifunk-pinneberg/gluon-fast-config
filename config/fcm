@@ -1,0 +1,7 @@
+
+config core 'main'
+	option enabled '0'
+	option auth_by_wps_key '0'
+	option auth_by_otp '0'
+
+
