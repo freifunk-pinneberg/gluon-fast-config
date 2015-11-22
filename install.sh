@@ -24,13 +24,13 @@ echo "Kopieren der Dateien (Hotplug)"
 scp -r ./button/ root@$1:/etc/hotplug.d/
 echo ""
 echo "Kopieren der Dateien (libs)..."
-scp -r ./lib/ root@$1:/usr/lib/
+scp -r ./lib/ root@$1:/usr/
 echo ""
 echo "Kopieren der Dateien (bins)..."
-scp -r ./bin/ root@$1:/usr/bin/
+scp -r ./bin/ root@$1:/usr/
 echo ""
 echo "Kopieren der Dateien (config)..."
-scp -r ./config/ root@$1:/etc/config/
+scp -r ./config/ root@$1:/etc/
 echo ""
 echo ""
 echo "Fertig."
