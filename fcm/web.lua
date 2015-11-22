@@ -45,6 +45,15 @@ function web_lua:start_of_body(subpage, fcm_activ)
 	
 	if fcm_activ == true then
 	
+		-- Allgemein	
+		if subpage == "/general" then
+			io.write("			<li id=\"link1\" class=\"first active first_active\">")
+		else
+			io.write("			<li id=\"link2\">")
+		end	
+		io.write("				<a href=\"/cgi-bin/config/general\">Allgemein</a>")
+		io.write("			</li>")
+	
 		-- Location	
 		if subpage == "/location" then
 			io.write("			<li id=\"link1\" class=\"first active first_active\">")

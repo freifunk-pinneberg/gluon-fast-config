@@ -173,6 +173,38 @@ if subpage == "/location" then
 
 end
 
+if subpage == "/general" then
+
+   if (command == "Setzen") then
+
+      local new_role = post_data["role"] or ""
+
+      local sname = uci:get_first("gluon-node-info", "system")
+      uci:set("gluon-node-info", sname, "role", new_role)
+      uci:save("gluon-node-info")
+      uci:commit("gluon-node-info")
+
+   end
+
+        -- Formular anzeigen	
+	io.write("<form action=\"/cgi-bin/config/general\" method=\"post\">")
+
+	fcm_web:table_start("Allgemein")
+
+	fcm_web:table_item("Rolle", "<input type=\"radio\" name=\"role\" value=\"node\">Normaler Knoten <br>" ..
+	                            "<input type=\"radio\" name=\"role\" value=\"mobile\">Mobiler Knoten - kann seine Kooordinaten regelmäßig ändern <br>" ..
+	                            "<input type=\"radio\" name=\"role\" value=\"offloader\">VPN Offloader <br>" ..
+	                            "<input type=\"radio\" name=\"role\" value=\"service\">Knoten für Dienste <br>" ..
+	                            "<input type=\"radio\" name=\"role\" value=\"test\">Knoten für Tests - wird bei der Offline-Zählung nicht berücksichtigt" )
+  
+	fcm_web:table_item("<input type=\"submit\" name=\"cmd\" value=\"Setzen\"></input>", "")
+
+	fcm_web:table_end()
+
+	io.write("</form>   ")
+
+end
+
 io.write("	</div>")
 io.write("</article>")
 
