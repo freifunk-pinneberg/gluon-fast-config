@@ -20,8 +20,14 @@ echo ""
 echo "Kopieren der Dateien (Webserver)..."
 scp -r ./www/ root@$1:/lib/gluon/status-page/
 echo ""
-echo "Kopieren der Dateien (System)"
+echo "Kopieren der Dateien (Hotplug)"
 scp -r ./button/ root@$1:/etc/hotplug.d/
+echo ""
+echo "Kopieren der Dateien (libs)..."
+scp -r ./lib/ root@$1:/usr/lib/
+echo ""
+echo "Kopieren der Dateien (bins)..."
+scp -r ./bin/ root@$1:/usr/bin/
 echo ""
 echo "Fertig."
 echo ""
